@@ -1,14 +1,15 @@
-# Render 블루프린트 — 웹 화면과 서버를 서비스 1개로 배포(같은 출처).
-# 적용은 사용자가 Render 대시보드에서 "New > Blueprint" 로 이 저장소를 연결해 직접 승인해야 한다.
-# plan: free 는 15분 무요청 시 잠들고 깨어나는 데 최대 1분 → 스테이징 전용. 정식 공개 시 starter(유료) 전환 검토.
+# Render 블루프린트 — 웹 화면과 서버를 서비스 1개로 배포(같은 출처) + 무료 PostgreSQL.
+# 무료 플랜 주의:
+#  - 웹 서비스: 15분 무요청 시 잠들고, 깨어나는 데 최대 약 1분 → 스테이징 전용
+#  - DB(free): 생성 후 30일 기한 → 기한 전에 Neon 무료 DB 로 옮기거나 유료 전환 필요(docs/12-deploy-recovery.md)
 services:
   - type: web
     name: quickplay-staging
     runtime: node
     plan: free
     region: singapore
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @qp/web build
-    startCommand: pnpm --filter @qp/server start
+    buildCommand: npx --yes pnpm@10.0.0 install --frozen-lockfile --prod=false && npx --yes pnpm@10.0.0 --filter @qp/web build
+    startCommand: cd apps/server && ./node_modules/.bin/tsx src/index.ts
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
@@ -17,12 +18,23 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: SESSION_SECRET
-        generateValue: true
+        generateValue: true # Render 가 무작위 값 생성(사람이 입력하지 않음)
       - key: WEB_DIST
         value: /opt/render/project/src/apps/web/dist
       - key: TRUST_PROXY_HOPS
         value: "1"
       - key: CORS_ORIGINS
-        sync: false # 예: https://quickplay-staging.onrender.com
+        value: https://quickplay-staging.onrender.com
       - key: DATABASE_URL
-        sync: false # Neon 연결 문자열(비워 두면 메모리 저장 — 재시작 시 기록 사라짐)
+        fromDatabase:
+          name: quickplay-db
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false # 구글 OAuth 클라이언트 ID(공개값) — 비워 두면 로그인 버튼 대신 "준비 중" 표시
+
+databases:
+  - name: quickplay-db
+    plan: free
+    region: singapore
+    databaseName: quickplay
+    user: quickplay
