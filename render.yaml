@@ -1,0 +1,26 @@
+# Render 블루프린트 — 웹 화면과 서버를 서비스 1개로 배포(같은 출처).
+# 적용은 사용자가 Render 대시보드에서 "New > Blueprint" 로 이 저장소를 연결해 직접 승인해야 한다.
+# plan: free 는 15분 무요청 시 잠들고 깨어나는 데 최대 1분 → 스테이징 전용. 정식 공개 시 starter(유료) 전환 검토.
+services:
+  - type: web
+    name: quickplay-staging
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @qp/web build
+    startCommand: pnpm --filter @qp/server start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: WEB_DIST
+        value: /opt/render/project/src/apps/web/dist
+      - key: CORS_ORIGINS
+        sync: false # 예: https://quickplay-staging.onrender.com
+      - key: DATABASE_URL
+        sync: false # Neon 연결 문자열(비워 두면 메모리 저장 — 재시작 시 기록 사라짐)
