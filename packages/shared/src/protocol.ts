@@ -93,6 +93,7 @@ export interface GuestSession {
   token: string;
   userId: string;
   nickname: string;
+  kind: "guest" | "account";
 }
 
 export interface GameStatsRow {

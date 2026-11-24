@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { GAMES, getGame, type GameStatsRow, type LeaderRow, type RecentRow } from "@qp/shared";
-import { apiGet, renameGuest } from "../lib/api";
+import { apiGet, loginExpired, logout, renameGuest } from "../lib/api";
+import { GoogleLoginButton } from "../components/GoogleLogin";
 
 interface Me {
   user: { id: string; nickname: string; kind: string };
@@ -56,9 +57,29 @@ export default function Records() {
             <button className="btn">닉네임 변경</button>
           </form>
         )}
-        <p className="muted small">
-          지금은 <strong>게스트</strong>로 플레이 중이에요. 기록은 이 브라우저에 연결돼 있어요(브라우저 데이터를 지우면 사라짐). 로그인 기능은 준비 중입니다.
-        </p>
+        {me?.user.kind === "account" ? (
+          <div className="row gap wrap" data-testid="logged-in">
+            <span>✅ 구글 계정으로 로그인됨 · 기록이 계정에 저장되고 랭킹에 참여해요.</span>
+            <button
+              className="btn ghost small"
+              onClick={() => {
+                logout();
+                location.reload();
+              }}
+            >
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <div className="stack small-gap">
+            {loginExpired && <p className="banner warn">로그인이 만료됐어요. 다시 로그인하면 계정 기록을 이어서 볼 수 있어요.</p>}
+            <p className="muted small">
+              지금은 <strong>게스트</strong>로 플레이 중이에요. 기록은 이 브라우저에만 연결돼 있어요. 로그인하면 지금까지의 기록이 계정으로 옮겨지고 랭킹에 참여해요.
+              (저장하는 정보: 구글 계정 고유번호와 닉네임뿐 — 이메일·이름은 저장하지 않아요)
+            </p>
+            <GoogleLoginButton />
+          </div>
+        )}
         {err && <p className="small">{err}</p>}
       </section>
 
@@ -139,7 +160,7 @@ export default function Records() {
             ))}
           </ol>
         ) : (
-          <p className="muted">랭킹은 부정 기록을 막기 위해 회원 기록만 집계해요. 로그인 기능이 열리면 표시됩니다.</p>
+          <p className="muted">아직 랭킹 기록이 없어요. 랭킹은 로그인한 회원의 기록만 집계해요(대전 승수는 랜덤 대전만).</p>
         )}
       </section>
     </div>

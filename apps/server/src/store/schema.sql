@@ -35,3 +35,7 @@ create table if not exists solo_records (
 );
 create index if not exists solo_records_game_idx on solo_records(game_id, score desc);
 create index if not exists solo_records_user_idx on solo_records(user_id);
+
+-- v2: 구글 로그인(계정 고유번호만 저장)
+alter table users add column if not exists google_sub text;
+create unique index if not exists users_google_sub_idx on users(google_sub);

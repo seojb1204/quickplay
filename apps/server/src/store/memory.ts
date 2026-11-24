@@ -6,6 +6,36 @@ export class MemoryStore implements Store {
   users = new Map<string, UserRow>();
   matches = new Map<string, MatchRecord>();
   solos = new Map<string, SoloRecord & { at: Date }>();
+  googleSubs = new Map<string, string>();
+
+  async findOrCreateGoogleUser(sub: string, nickname: string, newId: string): Promise<UserRow> {
+    const existing = this.googleSubs.get(sub);
+    if (existing) return { ...this.users.get(existing)! };
+    const u: UserRow = { id: newId, kind: "account", nickname };
+    this.users.set(newId, u);
+    this.googleSubs.set(sub, newId);
+    return { ...u };
+  }
+
+  async mergeGuestInto(guestId: string, accountId: string): Promise<number> {
+    if (this.users.get(guestId)?.kind !== "guest") return 0;
+    let n = 0;
+    for (const m of this.matches.values()) {
+      for (const p of m.players) {
+        if (p.userId === guestId) {
+          p.userId = accountId;
+          n++;
+        }
+      }
+    }
+    for (const r of this.solos.values()) {
+      if (r.userId === guestId) {
+        r.userId = accountId;
+        n++;
+      }
+    }
+    return n;
+  }
 
   async init() {}
   async close() {}

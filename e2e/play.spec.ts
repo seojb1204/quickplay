@@ -164,3 +164,8 @@ test("뱀 대전 중 새로고침해도 경기로 복귀하고 결과가 양쪽�
   const tb = await b.getByTestId("result").locator("p").first().textContent();
   expect(ta).toBe(tb);
 });
+
+test("내 기록: 구글 클라이언트 ID 가 없으면 로그인 준비 중 안내", async ({ page }) => {
+  await page.goto("/me");
+  await expect(page.getByTestId("login-disabled")).toBeVisible({ timeout: 10_000 });
+});

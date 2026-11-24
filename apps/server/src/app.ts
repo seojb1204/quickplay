@@ -16,7 +16,8 @@ import {
   type ServerToClient,
   type SnakeInput,
 } from "@qp/shared";
-import { newGuestId, randomNickname, signGuest, verifyGuest, type SessionUser } from "./auth.js";
+import { newAccountId, newGuestId, randomNickname, signSession, verifySession, type SessionUser } from "./auth.js";
+import { createGoogleVerifier, type GoogleVerifier } from "./google.js";
 import type { ServerConfig } from "./config.js";
 import { Hub } from "./hub.js";
 import type { Store } from "./store/types.js";
@@ -43,7 +44,12 @@ export function sanitizeNickname(raw: unknown): string | null {
   return s;
 }
 
-export async function buildApp(config: ServerConfig, store: Store) {
+export interface AppDeps {
+  /** 테스트에서 구글 검증을 대체할 때 사용 */
+  verifyGoogle?: GoogleVerifier;
+}
+
+export async function buildApp(config: ServerConfig, store: Store, deps: AppDeps = {}) {
   const app: FastifyInstance = Fastify({
     logger: process.env.NODE_ENV === "test" ? false : { level: "info" },
     // 신뢰할 프록시 홉 수만큼만 X-Forwarded-For 를 해석(0 = 믿지 않음. true 면 클라이언트가 IP 를 위조해 속도 제한 우회 가능)
@@ -62,7 +68,7 @@ export async function buildApp(config: ServerConfig, store: Store) {
   const authUser = (req: FastifyRequest): SessionUser | null => {
     const h = req.headers.authorization;
     if (!h?.startsWith("Bearer ")) return null;
-    return verifyGuest(config.sessionSecret, h.slice(7));
+    return verifySession(config.sessionSecret, h.slice(7));
   };
 
   const soloSessions = new Map<string, SoloSession>();
@@ -76,10 +82,33 @@ export async function buildApp(config: ServerConfig, store: Store) {
 
   app.get("/api/games", async () => ({ games: GAMES }));
 
-  // 비회원 세션 발급/닉네임 변경. 기존 토큰이 유효하면 같은 사용자 id 를 유지한다.
+  // 브라우저가 실행 시점에 읽는 공개 설정(재빌드 없이 서버 환경변수로 바꿀 수 있게)
+  app.get("/api/config", async () => ({ googleClientId: config.googleClientId }));
+
+  const verifyGoogle = deps.verifyGoogle ?? (config.googleClientId ? createGoogleVerifier(config.googleClientId) : null);
+
+  // 구글 로그인: ID 토큰 검증 → 회원 찾기/만들기 → (있으면) 지금 브라우저의 비회원 기록을 회원으로 이전
+  app.post("/api/auth/google", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (!verifyGoogle) return reply.code(503).send({ error: "LOGIN_DISABLED" });
+    const { credential, token } = (req.body ?? {}) as { credential?: unknown; token?: unknown };
+    if (typeof credential !== "string" || credential.length > 4096) return reply.code(400).send({ error: "BAD_CREDENTIAL" });
+    const g = await verifyGoogle(credential);
+    if (!g) return reply.code(401).send({ error: "INVALID_GOOGLE_TOKEN" });
+    const current = verifySession(config.sessionSecret, token);
+    const nickname = current?.nickname ?? randomNickname();
+    const account = await store.findOrCreateGoogleUser(g.sub, nickname, newAccountId());
+    let merged = 0;
+    if (current?.kind === "guest") merged = await store.mergeGuestInto(current.id, account.id);
+    const user: SessionUser = { id: account.id, nickname: account.nickname, kind: "account" };
+    const session: GuestSession = { token: signSession(config.sessionSecret, user), userId: user.id, nickname: user.nickname, kind: "account" };
+    return { ...session, merged };
+  });
+
+  // 세션 발급/갱신/닉네임 변경. 기존 토큰이 유효하면 같은 사용자(비회원·회원)를 유지한다.
+  // 회원 토큰이 만료됐으면 새 비회원을 발급하고 expired=true 로 알린다.
   app.post("/api/guest", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     const body = (req.body ?? {}) as { token?: unknown; nickname?: unknown };
-    const existing = verifyGuest(config.sessionSecret, body.token);
+    const existing = verifySession(config.sessionSecret, body.token);
     let nickname = existing?.nickname ?? randomNickname();
     if (body.nickname !== undefined) {
       const n = sanitizeNickname(body.nickname);
@@ -87,9 +116,10 @@ export async function buildApp(config: ServerConfig, store: Store) {
       nickname = n;
     }
     const id = existing?.id ?? newGuestId();
-    await store.upsertUser({ id, kind: "guest", nickname });
-    const session: GuestSession = { token: signGuest(config.sessionSecret, { id, nickname }), userId: id, nickname };
-    return session;
+    const kind = existing?.kind ?? "guest";
+    await store.upsertUser({ id, kind, nickname });
+    const session: GuestSession = { token: signSession(config.sessionSecret, { id, nickname, kind }), userId: id, nickname, kind };
+    return { ...session, expired: !existing && typeof body.token === "string" };
   });
 
   app.get("/api/me/stats", async (req, reply) => {
@@ -178,7 +208,7 @@ export async function buildApp(config: ServerConfig, store: Store) {
   });
 
   io.use((socket, next) => {
-    const user = verifyGuest(config.sessionSecret, socket.handshake.auth?.token);
+    const user = verifySession(config.sessionSecret, socket.handshake.auth?.token);
     if (!user) return next(new Error("UNAUTHORIZED"));
     socket.data.user = user;
     // 경기 결과 저장 시 외래키가 깨지지 않도록 접속 전에 사용자 행을 보장(닉네임은 덮어쓰지 않음)
