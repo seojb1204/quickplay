@@ -7,6 +7,12 @@ pnpm --filter @qp/server dev        # http://localhost:8787
 pnpm --filter @qp/web dev           # http://localhost:5173 (API 프록시)
 ```
 
+## 현재 스테이징 (2026-11-25)
+- Render Blueprint `quickplay` → 웹 서비스 `quickplay-staging`(Free), DB `quickplay-db`(Free PostgreSQL), 지역 singapore
+- main 에 병합되면 자동 배포(autoDeploy)
+- 비밀값: SESSION_SECRET 은 Render 가 생성, DATABASE_URL 은 DB 에서 자동 연결 — 사람이 입력한 비밀값 없음
+- GOOGLE_CLIENT_ID: Render 대시보드 > quickplay-staging > Environment 에서 설정(공개값)
+
 ## 스테이징 배포 (사용자 승인 필요 단계 표시 ⚠️)
 1. ⚠️ Render 가입 → New > Blueprint → 이 저장소 선택 → `render.yaml` 적용(Free).
 2. ⚠️ (선택) Neon 무료 프로젝트 생성 → 연결 문자열을 Render 의 `DATABASE_URL` 에 입력. 비우면 메모리 저장.
