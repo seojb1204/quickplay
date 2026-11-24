@@ -38,5 +38,9 @@ export interface Store {
   getRecent(userId: string, limit: number): Promise<RecentRow[]>;
   /** 랭킹은 회원(account) 기록만, 승수는 랜덤 대전만 집계한다(친구끼리 승수 몰아주기 방지) */
   getLeaderboard(gameId: string, metric: "wins" | "best", limit: number): Promise<LeaderRow[]>;
+  /** 구글 계정 고유번호로 회원을 찾고, 없으면 만든다 */
+  findOrCreateGoogleUser(sub: string, nickname: string, newId: string): Promise<UserRow>;
+  /** 비회원 기록(대전·솔로)을 회원에게 옮긴다. 옮긴 기록 수를 돌려준다 */
+  mergeGuestInto(guestId: string, accountId: string): Promise<number>;
   close(): Promise<void>;
 }

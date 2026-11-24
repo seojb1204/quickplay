@@ -4,7 +4,7 @@
 
 | 테이블 | 주요 열 | 비고 |
 |---|---|---|
-| users | id, kind(guest/account), nickname | 개인정보: 닉네임만 |
+| users | id, kind(guest/account), nickname, google_sub(고유) | 개인정보: 닉네임 + 구글 계정 고유번호. 이메일·이름 저장 안 함 |
 | matches | id(UUID), game_id, mode, reason, started_at, ended_at | id 기본키 + `on conflict do nothing` → 중복 저장 차단 |
 | match_players | match_id, user_id, seat, outcome, score | outcome null = 기록 없는 종료 |
 | solo_records | id(=솔로 세션 id), user_id, game_id, score, verified | 세션당 1회만 저장 |

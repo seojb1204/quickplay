@@ -33,6 +33,37 @@ export class PostgresStore implements Store {
     await this.pool.query(`insert into users (id, kind, nickname) values ($1,$2,$3) on conflict (id) do nothing`, [u.id, u.kind, u.nickname]);
   }
 
+  async findOrCreateGoogleUser(sub: string, nickname: string, newId: string): Promise<UserRow> {
+    // 동시에 두 번 로그인해도 한 명만 생기도록 고유 인덱스 + on conflict
+    await this.pool.query(
+      `insert into users (id, kind, nickname, google_sub) values ($1,'account',$2,$3) on conflict (google_sub) do nothing`,
+      [newId, nickname, sub],
+    );
+    const r = await this.pool.query(`select id, kind, nickname from users where google_sub = $1`, [sub]);
+    return r.rows[0] as UserRow;
+  }
+
+  async mergeGuestInto(guestId: string, accountId: string): Promise<number> {
+    const c = await this.pool.connect();
+    try {
+      await c.query("begin");
+      const g = await c.query(`select kind from users where id = $1 for update`, [guestId]);
+      if (g.rows[0]?.kind !== "guest") {
+        await c.query("rollback");
+        return 0;
+      }
+      const a = await c.query(`update match_players set user_id = $2 where user_id = $1`, [guestId, accountId]);
+      const b = await c.query(`update solo_records set user_id = $2 where user_id = $1`, [guestId, accountId]);
+      await c.query("commit");
+      return (a.rowCount ?? 0) + (b.rowCount ?? 0);
+    } catch (e) {
+      await c.query("rollback").catch(() => {});
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+
   async saveMatch(m: MatchRecord) {
     const c = await this.pool.connect();
     try {

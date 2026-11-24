@@ -2,7 +2,7 @@
 import type { AddressInfo } from "node:net";
 import { io as connect, type Socket } from "socket.io-client";
 import type { ClientToServer, GuestSession, MatchResult, MatchStart, RoomView, ServerToClient } from "@qp/shared";
-import { buildApp } from "./app.js";
+import { buildApp, type AppDeps } from "./app.js";
 import { loadConfig, type ServerConfig } from "./config.js";
 import { MemoryStore } from "./store/memory.js";
 import { PostgresStore } from "./store/postgres.js";
@@ -13,12 +13,12 @@ export type Client = Socket<ServerToClient, ClientToServer> & {
   last: { room: RoomView | null; start: MatchStart | null; state: unknown; end: MatchResult | null };
 };
 
-export async function startServer(overrides: Partial<ServerConfig> = {}) {
+export async function startServer(overrides: Partial<ServerConfig> = {}, deps: AppDeps = {}) {
   const config = { ...loadConfig({ NODE_ENV: "test" }), port: 0, host: "127.0.0.1", countdownMs: 200, reconnectGraceMs: 400, ...overrides };
   const pgUrl = process.env.TEST_DATABASE_URL;
   const store: Store = pgUrl ? new PostgresStore(pgUrl) : new MemoryStore();
   await store.init();
-  const { app, hub } = await buildApp(config, store);
+  const { app, hub } = await buildApp(config, store, deps);
   await app.listen({ port: 0, host: "127.0.0.1" });
   const port = (app.server.address() as AddressInfo).port;
   const base = `http://127.0.0.1:${port}`;

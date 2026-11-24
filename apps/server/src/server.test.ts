@@ -438,12 +438,14 @@ describe("잘못된 형식의 요청", () => {
 describe("랭킹 집계 범위", () => {
   it("승수 랭킹은 회원의 랜덤 대전 승리만 센다(친구전 승수 몰아주기 차단)", async () => {
     const st = srv.store;
-    await st.upsertUser({ id: "acc_1", kind: "account", nickname: "회원1" });
-    await st.upsertUser({ id: "acc_2", kind: "account", nickname: "회원2" });
+    // 실행마다 고유 id·닉네임(같은 DB 를 여러 번 써도 섞이지 않게)
+    const u = Math.random().toString(36).slice(2, 8);
+    await st.upsertUser({ id: `acc_1_${u}`, kind: "account", nickname: `회원1${u}` });
+    await st.upsertUser({ id: `acc_2_${u}`, kind: "account", nickname: `회원2${u}` });
     const base = { gameId: "gomoku", reason: "normal", startedAt: new Date(), endedAt: new Date() };
     const players = [
-      { userId: "acc_1", seat: 0 as const, outcome: "win" as const, score: 1 },
-      { userId: "acc_2", seat: 1 as const, outcome: "loss" as const, score: 0 },
+      { userId: `acc_1_${u}`, seat: 0 as const, outcome: "win" as const, score: 1 },
+      { userId: `acc_2_${u}`, seat: 1 as const, outcome: "loss" as const, score: 0 },
     ];
     await st.saveMatch({ ...base, id: `m_${Math.random()}`, mode: "friend", players });
     await st.saveMatch({ ...base, id: `m_${Math.random()}`, mode: "friend", players });
@@ -451,8 +453,8 @@ describe("랭킹 집계 범위", () => {
     const dupId = `m_${Math.random()}`;
     expect(await st.saveMatch({ ...base, id: dupId, mode: "random", players })).toBe(true);
     expect(await st.saveMatch({ ...base, id: dupId, mode: "random", players })).toBe(false); // 중복 저장 차단
-    const lb = await st.getLeaderboard("gomoku", "wins", 10);
-    const me = lb.find((r) => r.nickname === "회원1");
+    const lb = await st.getLeaderboard("gomoku", "wins", 1000);
+    const me = lb.find((r) => r.nickname === `회원1${u}`);
     expect(me?.value).toBe(2); // 친구전 2승 제외, 랜덤 2승만
   });
 });

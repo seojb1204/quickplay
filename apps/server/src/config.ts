@@ -14,6 +14,8 @@ export interface ServerConfig {
   gomokuTurnMs: number;
   /** 앞단 프록시 개수(Render 1). 0 이면 X-Forwarded-For 를 믿지 않음 */
   trustProxyHops: number;
+  /** 구글 OAuth 클라이언트 ID(공개값). 비우면 로그인 기능 꺼짐 */
+  googleClientId: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -36,5 +38,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     countdownMs: Number(env.COUNTDOWN_MS ?? 3_000),
     gomokuTurnMs: Number(env.GOMOKU_TURN_MS ?? 30_000),
     trustProxyHops: Number(env.TRUST_PROXY_HOPS ?? 0),
+    googleClientId: env.GOOGLE_CLIENT_ID || null,
   };
 }

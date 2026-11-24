@@ -7,7 +7,9 @@
 |---|---|---|---|
 | GET | /api/health | - | 상태 확인 |
 | GET | /api/games | - | 게임 카탈로그 |
-| POST | /api/guest | - | `{token?, nickname?}` → `{token, userId, nickname}` 비회원 토큰 발급·닉네임 변경 |
+| GET | /api/config | - | `{googleClientId}` 공개 설정 |
+| POST | /api/guest | - | `{token?, nickname?}` → `{token, userId, nickname, kind, expired}` 세션 발급·갱신·닉네임 변경 |
+| POST | /api/auth/google | - | `{credential, token?}` → 회원 세션 + `merged`(옮긴 비회원 기록 수). 분당 20회 |
 | GET | /api/me/stats | Bearer | 게임별 통계 + 최근 20판 |
 | GET | /api/leaderboard/:gameId | - | 회원만 집계. 기록 경쟁 = 최고점, 대전 = 승수 |
 | POST | /api/solo/start | Bearer | `{gameId}` → `{sessionId, seed}` (현재 snake 만) |
