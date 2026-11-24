@@ -141,3 +141,26 @@ test("솔로 오목·패들은 컴퓨터 상대로 바로 시작", async ({ page
   await page.getByRole("button", { name: "시작" }).click();
   await expect(page.locator("canvas")).toBeVisible();
 });
+
+test("뱀 대전 중 새로고침해도 경기로 복귀하고 결과가 양쪽에 나온다", async ({ browser }) => {
+  const a = await newPlayer(browser);
+  const b = await newPlayer(browser);
+  await a.getByTestId("create-room").click();
+  const code = (await a.getByTestId("room-code").textContent())!.trim();
+  await b.goto(`/r/${code}`);
+  await b.getByTestId("pick-snake").click();
+  await a.getByTestId("ready").click();
+  await b.getByTestId("ready").click();
+  await expect(a.getByTestId("snake-canvas")).toBeVisible({ timeout: 10_000 });
+  await expect(a.locator(".countdown")).toHaveCount(0, { timeout: 5_000 });
+  await a.keyboard.press("ArrowDown"); // 아래로 꺾어 벽까지 시간을 번다(약 1.1초)
+  await a.waitForTimeout(400);
+  await a.reload();
+  // 새로고침 후 같은 방·같은 경기로 복귀(복구 정보로 이어서 진행)
+  await expect(a.getByTestId("snake-canvas").or(a.getByTestId("result"))).toBeVisible({ timeout: 10_000 });
+  await expect(a.getByTestId("result")).toBeVisible({ timeout: 20_000 });
+  await expect(b.getByTestId("result")).toBeVisible();
+  const ta = await a.getByTestId("result").locator("p").first().textContent();
+  const tb = await b.getByTestId("result").locator("p").first().textContent();
+  expect(ta).toBe(tb);
+});

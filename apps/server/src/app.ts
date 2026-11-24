@@ -32,12 +32,13 @@ interface SoloSession {
 /** 서버에서 리플레이 검증이 가능한 솔로 기록 게임 */
 const VERIFIED_SOLO = new Set(["snake"]);
 const SOLO_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_OPEN_SOLO_PER_USER = 3;
 
 export function sanitizeNickname(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
-  // 제어문자와 꺾쇠 제거(의도적인 제어문자 정규식)
+  // 제어문자·꺾쇠·서식 문자(양방향 재정렬·폭 없는 문자 등) 제거 — 다른 사람 닉네임 흉내 방지
   // eslint-disable-next-line no-control-regex
-  const s = raw.normalize("NFC").replace(/[\u0000-\u001f\u007f<>]/g, "").trim();
+  const s = raw.normalize("NFC").replace(/[\u0000-\u001f\u007f<>]|\p{Cf}/gu, "").trim();
   if ([...s].length < 2 || [...s].length > 12) return null;
   return s;
 }
@@ -45,12 +46,18 @@ export function sanitizeNickname(raw: unknown): string | null {
 export async function buildApp(config: ServerConfig, store: Store) {
   const app: FastifyInstance = Fastify({
     logger: process.env.NODE_ENV === "test" ? false : { level: "info" },
-    trustProxy: true,
+    // 신뢰할 프록시 홉 수만큼만 X-Forwarded-For 를 해석(0 = 믿지 않음. true 면 클라이언트가 IP 를 위조해 속도 제한 우회 가능)
+    trustProxy: (_addr: string, hop: number) => hop < config.trustProxyHops,
     bodyLimit: 256 * 1024,
   });
 
   await app.register(cors, { origin: config.corsOrigins, credentials: false });
-  await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
+  // 속도 제한은 API 에만 적용(정적 파일·페이지 로드는 제외). PC방·학교처럼 IP 하나를 여럿이 쓰는 경우를 고려해 여유 있게
+  await app.register(rateLimit, {
+    max: 300,
+    timeWindow: "1 minute",
+    allowList: (req) => !req.url.startsWith("/api"),
+  });
 
   const authUser = (req: FastifyRequest): SessionUser | null => {
     const h = req.headers.authorization;
@@ -105,13 +112,17 @@ export async function buildApp(config: ServerConfig, store: Store) {
     if (!u) return reply.code(401).send({ error: "UNAUTHORIZED" });
     const { gameId } = (req.body ?? {}) as { gameId?: unknown };
     if (typeof gameId !== "string" || !VERIFIED_SOLO.has(gameId)) return reply.code(400).send({ error: "UNKNOWN_GAME" });
+    // 사용자당 미제출 솔로 세션 수 제한(메모리 고갈 방지): 넘치면 가장 오래된 것 폐기
+    const mine = [...soloSessions.entries()].filter(([, v]) => v.userId === u.id && !v.used).sort((a, b) => a[1].startedAt - b[1].startedAt);
+    while (mine.length >= MAX_OPEN_SOLO_PER_USER) soloSessions.delete(mine.shift()![0]);
     const sessionId = randomUUID();
     const seed = Math.floor(Math.random() * 0xffffffff) >>> 0;
     soloSessions.set(sessionId, { userId: u.id, gameId, seed, startedAt: Date.now(), used: false });
     return { sessionId, seed };
   });
 
-  app.post("/api/solo/finish", async (req, reply) => {
+  // 긴 플레이(최대 1시간)의 입력 기록도 받을 수 있게 이 경로만 본문 상한 상향
+  app.post("/api/solo/finish", { bodyLimit: 2 * 1024 * 1024 }, async (req, reply) => {
     const u = authUser(req);
     if (!u) return reply.code(401).send({ error: "UNAUTHORIZED" });
     const { sessionId, inputs, endTick } = (req.body ?? {}) as { sessionId?: unknown; inputs?: unknown; endTick?: unknown };
@@ -126,10 +137,15 @@ export async function buildApp(config: ServerConfig, store: Store) {
     if (endTick * SNAKE.TICK_MS > elapsed + 3_000) return reply.code(400).send({ error: "IMPLAUSIBLE_DURATION" });
     const check = validateSnakeInputs(inputs, endTick);
     if (!check.ok) return reply.code(400).send({ error: check.error });
-    sess.used = true;
+    sess.used = true; // 동시 중복 제출 차단
     const sim = simulateSnake(sess.seed, inputs as SnakeInput[], endTick);
-    await store.upsertUser({ id: u.id, kind: u.kind, nickname: u.nickname });
-    await store.saveSolo({ id: sessionId as string, userId: u.id, gameId: sess.gameId, score: sim.score, verified: true });
+    try {
+      await store.ensureUser({ id: u.id, kind: u.kind, nickname: u.nickname });
+      await store.saveSolo({ id: sessionId as string, userId: u.id, gameId: sess.gameId, score: sim.score, verified: true });
+    } catch (e) {
+      sess.used = false; // 저장 실패 시 다시 제출 가능
+      throw e;
+    }
     const stats = await store.getStats(u.id);
     const best = stats.find((s) => s.gameId === sess.gameId)?.best ?? sim.score;
     return { score: sim.score, best };
@@ -157,6 +173,7 @@ export async function buildApp(config: ServerConfig, store: Store) {
   const hub = new Hub(io, store, {
     reconnectGraceMs: config.reconnectGraceMs,
     countdownMs: config.countdownMs,
+    gomokuTurnMs: config.gomokuTurnMs,
     log: (msg, extra) => app.log.warn({ ...extra }, msg),
   });
 
@@ -164,13 +181,18 @@ export async function buildApp(config: ServerConfig, store: Store) {
     const user = verifyGuest(config.sessionSecret, socket.handshake.auth?.token);
     if (!user) return next(new Error("UNAUTHORIZED"));
     socket.data.user = user;
-    next();
+    // 경기 결과 저장 시 외래키가 깨지지 않도록 접속 전에 사용자 행을 보장(닉네임은 덮어쓰지 않음)
+    store
+      .ensureUser({ id: user.id, kind: user.kind, nickname: user.nickname })
+      .then(() => next())
+      .catch((e) => {
+        app.log.error({ err: String(e) }, "ensureUser failed");
+        next(new Error("UNAVAILABLE"));
+      });
   });
 
   io.on("connection", (socket) => {
-    const user = socket.data.user as SessionUser;
-    void store.upsertUser({ id: user.id, kind: user.kind, nickname: user.nickname }).catch(() => {});
-    hub.attach(socket, user);
+    hub.attach(socket, socket.data.user as SessionUser);
   });
 
   app.addHook("onClose", async () => {

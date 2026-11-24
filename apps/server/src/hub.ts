@@ -78,6 +78,7 @@ const fail = (error: ErrorCode, message?: string): { ok: false; error: ErrorCode
 export interface HubOptions {
   reconnectGraceMs: number;
   countdownMs?: number;
+  gomokuTurnMs?: number;
   log?: (msg: string, extra?: object) => void;
 }
 
@@ -97,11 +98,12 @@ export class Hub {
 
   attach(socket: Sock, user: SessionUser) {
     const prev = this.sockets.get(user.id);
+    // 새 소켓을 먼저 등록해야 이전 소켓의 disconnect 처리가 "대체됨"으로 무시된다(대기열·준비 상태 유지)
+    this.sockets.set(user.id, socket);
     if (prev && prev.id !== socket.id) {
       prev.emit("session:replaced");
       prev.disconnect(true);
     }
-    this.sockets.set(user.id, socket);
 
     const general = new TokenBucket(10, 20);
     const actions = new TokenBucket(40, 80);
@@ -153,7 +155,7 @@ export class Hub {
         socket.join(room.code);
         this.emitRoom(room);
         if (room.match && !room.match.ended) {
-          socket.emit("match:start", this.matchStartFor(room, pl.seat));
+          socket.emit("match:start", { ...this.matchStartFor(room, pl.seat), resume: room.match.game.resume?.(pl.seat) });
           socket.emit("match:state", room.match.game.snapshot());
         }
       }
@@ -171,10 +173,21 @@ export class Hub {
     if (!pl) return;
     pl.connected = false;
     pl.ready = false;
+    if (room.match && !room.match.ended) this.safe(() => room.match?.game.onDisconnect?.(pl.seat));
     pl.graceDeadline = Date.now() + this.opts.reconnectGraceMs;
     pl.graceTimer = setTimeout(() => {
       pl.graceTimer = null;
-      if (!pl.connected) this.leaveRoom(userId, "disconnect");
+      if (pl.connected) return;
+      // 둘 다 끊긴 상태면 먼저 끊긴 쪽만 지는 것은 불공정 → 기록 없이 종료
+      if (room.match && !room.match.ended && room.players.every((p) => !p.connected)) {
+        this.finishMatch(room, room.match, {
+          reason: "abandoned",
+          outcomes: null,
+          scores: [0, 0],
+          summary: "양쪽 모두 연결이 끊겨 기록 없이 종료되었습니다",
+        });
+      }
+      this.leaveRoom(userId, "disconnect");
     }, this.opts.reconnectGraceMs);
     this.emitRoom(room);
   }
@@ -241,6 +254,9 @@ export class Hub {
     const seat: 0 | 1 = room.players[0]?.seat === 0 ? 1 : 0;
     room.players.push(this.newPlayer(user, seat));
     room.players.sort((a, b) => a.seat - b.seat);
+    // 새로 들어온 사람에게 이전 사람의 결과가 자기 결과처럼 보이지 않게
+    room.lastResult = null;
+    if (room.phase === "result") room.phase = "lobby";
     this.userRoom.set(user.id, code);
     this.sockets.get(user.id)?.join(code);
     this.emitRoom(room);
@@ -264,6 +280,7 @@ export class Hub {
       return { ok: true };
     }
     for (const p of room.players) p.ready = false;
+    // 남은 사람은 방금 경기의 당사자이므로 결과를 그대로 보여준다(새로 들어오는 사람이 오면 지움)
     if (room.mode === "friend") room.phase = room.lastResult ? "result" : "lobby";
     this.emitRoom(room);
     return { ok: true };
@@ -330,6 +347,7 @@ export class Hub {
       gameId: q?.gameId ?? null,
       since: q?.since ?? null,
       waiting: q ? this.queue.filter((x) => x.gameId === q.gameId).length : 0,
+      serverNow: Date.now(),
     });
   }
 
@@ -394,15 +412,16 @@ export class Hub {
         if (!match.ended) this.io.to(room.code).emit("match:state", s);
       },
       end: (r) => this.finishMatch(room, match, r),
+      tuning: { gomokuTurnMs: this.opts.gomokuTurnMs ?? 30_000 },
       setTimer: (fn, ms) => {
         const t = setTimeout(() => {
           match.timers.delete(t);
-          fn();
+          this.guardMatch(room, match, fn);
         }, ms);
         match.timers.add(t);
       },
       setRepeat: (fn, ms) => {
-        const t = setInterval(fn, ms);
+        const t = setInterval(() => this.guardMatch(room, match, fn), ms);
         match.repeats.add(t);
       },
     });
@@ -411,6 +430,24 @@ export class Hub {
       this.sockets.get(p.user.id)?.emit("match:start", this.matchStartFor(room, p.seat));
     }
     this.io.to(room.code).emit("match:state", match.game.snapshot());
+  }
+
+  /** 게임 타이머 안의 예외가 서버 전체를 죽이지 않도록: 기록 없이 그 경기만 종료 */
+  private guardMatch(room: Room, match: ActiveMatch, fn: () => void) {
+    try {
+      fn();
+    } catch (e) {
+      this.opts.log?.("match timer error", { err: String(e), matchId: match.id });
+      this.finishMatch(room, match, { reason: "abandoned", outcomes: null, scores: [0, 0], summary: "서버 오류로 경기가 기록 없이 종료되었습니다" });
+    }
+  }
+
+  private safe(fn: () => void) {
+    try {
+      fn();
+    } catch (e) {
+      this.opts.log?.("handler error", { err: String(e) });
+    }
   }
 
   private endByLeave(room: Room, leaverSeat: 0 | 1, reason: EndReason) {

@@ -11,6 +11,9 @@ export interface ServerConfig {
   /** 테스트에서 시간 단축용 */
   reconnectGraceMs: number;
   countdownMs: number;
+  gomokuTurnMs: number;
+  /** 앞단 프록시 개수(Render 1). 0 이면 X-Forwarded-For 를 믿지 않음 */
+  trustProxyHops: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -31,5 +34,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     webDist: env.WEB_DIST || null,
     reconnectGraceMs: Number(env.RECONNECT_GRACE_MS ?? 15_000),
     countdownMs: Number(env.COUNTDOWN_MS ?? 3_000),
+    gomokuTurnMs: Number(env.GOMOKU_TURN_MS ?? 30_000),
+    trustProxyHops: Number(env.TRUST_PROXY_HOPS ?? 0),
   };
 }

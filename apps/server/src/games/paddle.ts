@@ -56,6 +56,10 @@ export const paddleModule: ServerGameModule = {
 
     return {
       snapshot: wire,
+      // 연결이 끊긴 쪽 패들은 멈춘다(마지막 입력으로 계속 움직이지 않게)
+      onDisconnect(seat) {
+        inputs[seat] = 0;
+      },
       action(seat, type, data) {
         if (over) return { ok: false, error: "GAME_OVER" };
         if (type !== "input") return { ok: false, error: "UNKNOWN_ACTION" };

@@ -95,6 +95,9 @@ function RandomStart({ gameId, onSolo, onFriend }: { gameId: string; onSolo(): v
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const waiting = live.queue.gameId === gameId;
+  // 대기 시간은 이 브라우저 시계로 잰다(서버와 시계가 어긋나도 안내 시점이 틀어지지 않게)
+  const [waitStart, setWaitStart] = useState<number | null>(null);
+  useEffect(() => setWaitStart(waiting ? Date.now() : null), [waiting]);
 
   useEffect(() => {
     if (!waiting) return;
@@ -105,7 +108,7 @@ function RandomStart({ gameId, onSolo, onFriend }: { gameId: string; onSolo(): v
   // 이 화면을 떠나면 대기 취소
   useEffect(() => () => void send("queue:leave"), []);
 
-  const waitedMs = waiting && live.queue.since ? now - live.queue.since : 0;
+  const waitedMs = waiting && waitStart ? Math.max(0, now - waitStart) : 0;
 
   if (!waiting) {
     return (

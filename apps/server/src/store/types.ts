@@ -30,11 +30,13 @@ export interface UserRow {
 export interface Store {
   init(): Promise<void>;
   upsertUser(u: UserRow): Promise<void>;
+  /** 없을 때만 생성(닉네임 덮어쓰지 않음) */
+  ensureUser(u: UserRow): Promise<void>;
   saveMatch(m: MatchRecord): Promise<boolean>;
   saveSolo(r: SoloRecord): Promise<boolean>;
   getStats(userId: string): Promise<GameStatsRow[]>;
   getRecent(userId: string, limit: number): Promise<RecentRow[]>;
-  /** 랭킹은 회원(account) 기록만 집계한다 */
+  /** 랭킹은 회원(account) 기록만, 승수는 랜덤 대전만 집계한다(친구끼리 승수 몰아주기 방지) */
   getLeaderboard(gameId: string, metric: "wins" | "best", limit: number): Promise<LeaderRow[]>;
   close(): Promise<void>;
 }

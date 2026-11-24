@@ -14,6 +14,10 @@ export class MemoryStore implements Store {
     this.users.set(u.id, { ...u });
   }
 
+  async ensureUser(u: UserRow) {
+    if (!this.users.has(u.id)) this.users.set(u.id, { ...u });
+  }
+
   async saveMatch(m: MatchRecord) {
     if (this.matches.has(m.id)) return false;
     this.matches.set(m.id, structuredClone(m));
@@ -72,7 +76,7 @@ export class MemoryStore implements Store {
     const vals = new Map<string, number>();
     if (metric === "wins") {
       for (const m of this.matches.values()) {
-        if (m.gameId !== gameId) continue;
+        if (m.gameId !== gameId || m.mode !== "random") continue;
         for (const p of m.players) {
           if (p.outcome !== "win" || this.users.get(p.userId)?.kind !== "account") continue;
           vals.set(p.userId, (vals.get(p.userId) ?? 0) + 1);

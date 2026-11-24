@@ -36,17 +36,18 @@ export interface SnakeState {
 const OPPOSITE: Record<SnakeDir, SnakeDir> = { U: "D", D: "U", L: "R", R: "L" };
 const DIRS = new Set<string>(["U", "D", "L", "R"]);
 
+/**
+ * 먹이 위치: 먹이 1개당 난수 1번만 뽑는다(몸 상태와 무관) → 두 플레이어가 같은 시드면 같은 후보 칸 순서.
+ * 후보 칸이 자기 몸에 덮였을 때만 다음 빈칸으로 밀린다.
+ */
 function placeFood(body: number[], rngState: number): { food: number; rngState: number } {
   const rng = createRng(rngState);
   const total = SNAKE.SIZE * SNAKE.SIZE;
+  const candidate = rng.int(total);
   const occupied = new Set(body);
-  const free = total - occupied.size;
-  if (free <= 0) return { food: -1, rngState: rng.state() };
-  let k = rng.int(free);
-  for (let i = 0; i < total; i++) {
-    if (occupied.has(i)) continue;
-    if (k === 0) return { food: i, rngState: rng.state() };
-    k--;
+  for (let k = 0; k < total; k++) {
+    const c = (candidate + k) % total;
+    if (!occupied.has(c)) return { food: c, rngState: rng.state() };
   }
   return { food: -1, rngState: rng.state() };
 }
@@ -121,11 +122,12 @@ export function validateSnakeInputs(inputs: unknown, maxTick: number): InputChec
 }
 
 /**
- * 입력 기록을 upToTick 까지 재생. 입력 틱 t 는 "t 번째 틱을 계산할 때 적용"을 뜻한다.
+ * 현재 상태에서 이어서 재생(서버 증분 시뮬레이션용). inputs 는 전체 기록, 이미 적용된 틱 이후만 사용.
  */
-export function simulateSnake(seed: number, inputs: SnakeInput[], upToTick: number): SnakeState {
-  let s = createSnake(seed);
+export function advanceSnake(state: SnakeState, inputs: SnakeInput[], upToTick: number): SnakeState {
+  let s = state;
   let i = 0;
+  while (i < inputs.length && inputs[i]!.tick <= s.tick) i++;
   while (!s.dead && s.tick < upToTick) {
     const nextTick = s.tick + 1;
     let turn: SnakeDir | undefined;
@@ -136,6 +138,13 @@ export function simulateSnake(seed: number, inputs: SnakeInput[], upToTick: numb
     s = stepSnake(s, turn);
   }
   return s;
+}
+
+/**
+ * 입력 기록을 upToTick 까지 재생. 입력 틱 t 는 "t 번째 틱을 계산할 때 적용"을 뜻한다.
+ */
+export function simulateSnake(seed: number, inputs: SnakeInput[], upToTick: number): SnakeState {
+  return advanceSnake(createSnake(seed), inputs, upToTick);
 }
 
 /** 대전 결과 비교: 1 = a 승, -1 = b 승, 0 = 무승부 */

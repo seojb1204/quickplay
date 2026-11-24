@@ -1,5 +1,5 @@
 import { useEffect, useRef, type PointerEvent } from "react";
-import { SNAKE, canTurn, createSnake, stepSnake, type SnakeDir, type SnakeInput, type SnakeState } from "@qp/shared";
+import { SNAKE, advanceSnake, canTurn, createSnake, stepSnake, type SnakeDir, type SnakeInput, type SnakeState } from "@qp/shared";
 import { setupCanvas } from "../common";
 
 const CELL = 24;
@@ -24,6 +24,8 @@ export interface SnakeGameProps {
   /** 로컬 시계 기준 시작 시각(performance.now 아님, Date.now 기준) */
   startAtLocal: number;
   maxTicks: number;
+  /** 재접속 시 서버가 이미 받은 입력 기록 — 여기서부터 이어서 플레이 */
+  resume?: { inputs: SnakeInput[]; upTo: number };
   onProgress?(s: SnakeState, inputs: SnakeInput[]): void;
   onEnd(s: SnakeState, inputs: SnakeInput[]): void;
 }
@@ -66,18 +68,20 @@ function draw(ctx: CanvasRenderingContext2D, s: SnakeState, countdown: number) {
 }
 
 /** 결정적 뱀 게임 실행기. 입력은 "적용된 틱"과 함께 기록되어 서버 리플레이와 정확히 일치한다. */
-export function SnakeGame({ seed, startAtLocal, maxTicks, onProgress, onEnd }: SnakeGameProps) {
+export function SnakeGame({ seed, startAtLocal, maxTicks, resume, onProgress, onEnd }: SnakeGameProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const queue = useRef<SnakeDir[]>([]);
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const cbs = useRef({ onProgress, onEnd });
   cbs.current = { onProgress, onEnd };
+  const resumeRef = useRef(resume);
 
   useEffect(() => {
     if (!canvas.current) return;
     const ctx = setupCanvas(canvas.current, PX, PX);
-    let s = createSnake(seed);
-    const inputs: SnakeInput[] = [];
+    const r = resumeRef.current;
+    const inputs: SnakeInput[] = r ? r.inputs.map((i) => ({ ...i })) : [];
+    let s = r ? advanceSnake(createSnake(seed), inputs, r.upTo) : createSnake(seed);
     let raf = 0;
     let ended = false;
     queue.current = [];

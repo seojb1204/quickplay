@@ -1,4 +1,4 @@
-import { GOMOKU_TURN_MS, applyGomokuMove, createGomoku, type GomokuState } from "@qp/shared";
+import { applyGomokuMove, createGomoku, type GomokuState } from "@qp/shared";
 import { outcomesFor, type ServerGameModule } from "./types.js";
 
 export interface GomokuWire {
@@ -14,7 +14,8 @@ export const gomokuModule: ServerGameModule = {
   id: "gomoku",
   create(ctx) {
     let state: GomokuState = createGomoku();
-    let deadline = ctx.startAt + GOMOKU_TURN_MS;
+    const turnMs = ctx.tuning.gomokuTurnMs;
+    let deadline = ctx.startAt + turnMs;
     let turnTimerVersion = 0;
     let over = false;
 
@@ -55,7 +56,7 @@ export const gomokuModule: ServerGameModule = {
         const r = applyGomokuMove(state, seat, index);
         if (!r.ok) return { ok: false, error: r.error };
         state = r.state;
-        deadline = ctx.now() + GOMOKU_TURN_MS;
+        deadline = ctx.now() + turnMs;
         ctx.broadcast(wire());
         if (state.winner !== null || state.draw) {
           over = true;

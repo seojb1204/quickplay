@@ -27,13 +27,17 @@ export default function PaddleVersus({ seat, me, opponent }: VersusProps) {
       curAt = performance.now();
     });
     let sent: Dir = 0;
+    let sentAt = 0;
     let raf = 0;
     const labels: [string, string] = seat === 0 ? [`${me} (나)`, opponent] : [opponent, `${me} (나)`];
     const loop = () => {
       if (cur) {
         const dir = input.read(cur.p[seat]);
-        if (dir !== sent) {
+        // 바뀔 때 즉시 + 250ms 마다 재전송(중간에 유실된 "멈춤" 입력 복구)
+        const now = performance.now();
+        if (dir !== sent || now - sentAt > 250) {
           sent = dir;
+          sentAt = now;
           sendAction("input", { dir });
         }
         let frame: PaddleFrame = cur;

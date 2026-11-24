@@ -62,6 +62,8 @@ export interface MatchStart {
   /** 카운트다운 후 실제 시작 시각(서버 시계 ms epoch) */
   startAt: number;
   serverNow: number;
+  /** 재접속·새로고침 시 이어서 하기 위한 게임별 복구 정보(내 것만) */
+  resume?: unknown;
 }
 
 /** 클라이언트 → 서버 */
@@ -81,7 +83,7 @@ export interface ClientToServer {
 export interface ServerToClient {
   "session:replaced": () => void;
   "room:state": (room: RoomView | null) => void;
-  "queue:status": (s: { gameId: string | null; since: number | null; waiting: number }) => void;
+  "queue:status": (s: { gameId: string | null; since: number | null; waiting: number; serverNow: number }) => void;
   "match:start": (m: MatchStart) => void;
   "match:state": (s: unknown) => void;
   "match:end": (r: MatchResult) => void;

@@ -9,7 +9,14 @@ interface Wire {
   scores: [number, number];
   dead: [boolean, boolean];
   ticks: [number, number];
+  frozen: [boolean, boolean];
   endsAt: number;
+}
+
+interface Resume {
+  inputs: SnakeInput[];
+  upTo: number;
+  frozen: boolean;
 }
 
 /**
@@ -18,11 +25,16 @@ interface Wire {
 export default function SnakeVersus({ seat, seed, startAt, opponent, serverNow }: VersusProps) {
   const live = useLive();
   const wire = live.state as Wire | null;
-  const sentCount = useRef(0);
+  // 재접속·새로고침이면 서버가 이미 받은 기록부터 이어서 한다
+  const [resume] = useState(() => (getLive().start?.resume as Resume | undefined) ?? undefined);
+  // 시작 시각은 경기당 한 번만 정한다(재접속 때 시계 보정값이 바뀌어도 게임이 다시 시작되지 않게)
+  const [startAtLocal] = useState(() => startAt - getLive().clockOffset);
+  const sentCount = useRef(resume?.inputs.length ?? 0);
   const lastFlush = useRef(0);
   const finished = useRef(false);
   const [myScore, setMyScore] = useState(0);
   const [waiting, setWaiting] = useState(false);
+  const frozenMe = resume?.frozen || wire?.frozen?.[seat];
   const [left, setLeft] = useState(90);
   const opp: 0 | 1 = seat === 0 ? 1 : 0;
 
@@ -41,8 +53,6 @@ export default function SnakeVersus({ seat, seed, startAt, opponent, serverNow }
     return () => clearInterval(t);
   }, [wire?.endsAt, startAt, serverNow]);
 
-  const startAtLocal = startAt - getLive().clockOffset;
-
   return (
     <PlayArea>
       <div className="hud">
@@ -53,8 +63,12 @@ export default function SnakeVersus({ seat, seed, startAt, opponent, serverNow }
           {wire?.dead[opp] ? " (종료)" : ""}
         </span>
       </div>
+      {frozenMe ? (
+        <p className="panel center muted">연결이 5초 넘게 끊겨 내 기록이 그 시점에서 확정됐어요. 결과를 기다리는 중…</p>
+      ) : (
       <SnakeGame
         seed={seed}
+        resume={resume && { inputs: resume.inputs, upTo: resume.upTo }}
         startAtLocal={startAtLocal}
         maxTicks={SNAKE.VERSUS_TICKS}
         onProgress={(s, inputs) => {
@@ -67,6 +81,7 @@ export default function SnakeVersus({ seat, seed, startAt, opponent, serverNow }
           flush(s, inputs, true);
         }}
       />
+      )}
       {waiting && <p className="muted center">상대가 끝날 때까지 기다리는 중…</p>}
     </PlayArea>
   );

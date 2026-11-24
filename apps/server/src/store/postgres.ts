@@ -29,6 +29,10 @@ export class PostgresStore implements Store {
     );
   }
 
+  async ensureUser(u: UserRow) {
+    await this.pool.query(`insert into users (id, kind, nickname) values ($1,$2,$3) on conflict (id) do nothing`, [u.id, u.kind, u.nickname]);
+  }
+
   async saveMatch(m: MatchRecord) {
     const c = await this.pool.connect();
     try {
@@ -120,7 +124,7 @@ export class PostgresStore implements Store {
       metric === "wins"
         ? `select u.nickname, count(*)::int as value
              from match_players mp join matches m on m.id = mp.match_id join users u on u.id = mp.user_id
-            where m.game_id = $1 and mp.outcome = 'win' and u.kind = 'account'
+            where m.game_id = $1 and m.mode = 'random' and mp.outcome = 'win' and u.kind = 'account'
             group by u.id, u.nickname order by value desc limit $2`
         : `select u.nickname, max(s.score)::int as value
              from solo_records s join users u on u.id = s.user_id

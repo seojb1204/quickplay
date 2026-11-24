@@ -20,6 +20,8 @@ services:
         generateValue: true
       - key: WEB_DIST
         value: /opt/render/project/src/apps/web/dist
+      - key: TRUST_PROXY_HOPS
+        value: "1"
       - key: CORS_ORIGINS
         sync: false # 예: https://quickplay-staging.onrender.com
       - key: DATABASE_URL

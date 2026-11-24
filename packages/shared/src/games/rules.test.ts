@@ -7,7 +7,7 @@ import {
   type GomokuState,
 } from "./gomoku.js";
 import { PADDLE, createPaddle, stepPaddle, type PaddleState } from "./paddle.js";
-import { SNAKE, compareSnake, createSnake, simulateSnake, stepSnake, validateSnakeInputs } from "./snake.js";
+import { SNAKE, advanceSnake, compareSnake, createSnake, simulateSnake, stepSnake, validateSnakeInputs } from "./snake.js";
 import { createRng } from "../rng.js";
 import { GAMES } from "../catalog.js";
 
@@ -224,6 +224,45 @@ describe("꼬리잡기 뱀", () => {
     expect(replay.score).toBe(s.score);
     expect(replay.tick).toBe(s.tick);
     expect(replay.lastScoreTick).toBe(s.lastScoreTick);
+  });
+  it("같은 시드면 경로가 달라도 먹이 순서가 같다(공정성)", () => {
+    // 두 가지 다른 길찾기(가로 먼저 / 세로 먼저)로 먹이 위치 기록
+    const foods = (xFirst: boolean) => {
+      let s = createSnake(2024);
+      const seen = [s.food];
+      while (!s.dead && s.tick < 2000 && seen.length < 6) {
+        const hx = s.body[0]! % SNAKE.SIZE, hy = Math.floor(s.body[0]! / SNAKE.SIZE);
+        const fx = s.food % SNAKE.SIZE, fy = Math.floor(s.food / SNAKE.SIZE);
+        const horiz: "L" | "R" | null = fx > hx ? "R" : fx < hx ? "L" : null;
+        const vert: "U" | "D" | null = fy > hy ? "D" : fy < hy ? "U" : null;
+        let want = (xFirst ? horiz ?? vert : vert ?? horiz) ?? s.dir;
+        const opposite = { U: "D", D: "U", L: "R", R: "L" } as const;
+        if (want === opposite[s.dir]) want = s.dir === "L" || s.dir === "R" ? (hy > 10 ? "U" : "D") : hx > 10 ? "L" : "R";
+        const before = s.score;
+        s = stepSnake(s, want);
+        if (s.score !== before) seen.push(s.food);
+      }
+      return seen;
+    };
+    const a = foods(true);
+    const b = foods(false);
+    expect(a.length).toBeGreaterThanOrEqual(4);
+    expect(b.length).toBeGreaterThanOrEqual(4);
+    // 후보 칸이 자기 몸에 덮인 경우만 가까운 빈칸으로 밀리고, 다음 먹이부터는 다시 같은 순서로 돌아온다
+    const n = Math.min(a.length, b.length);
+    let same = 0;
+    for (let i = 0; i < n; i++) {
+      if (a[i] === b[i]) same++;
+      else expect(Math.abs(a[i]! - b[i]!)).toBeLessThan(SNAKE.SIZE * 2); // 근처 칸
+    }
+    expect(same).toBeGreaterThanOrEqual(n - 1);
+    expect(a[n - 1]).toBe(b[n - 1]);
+  });
+  it("증분 재생(advanceSnake)은 처음부터 재생한 결과와 같다", () => {
+    const inputs = [{ tick: 3, dir: "D" as const }, { tick: 8, dir: "L" as const }, { tick: 12, dir: "U" as const }];
+    const full = simulateSnake(9, inputs, 30);
+    const half = simulateSnake(9, inputs, 10);
+    expect(advanceSnake(half, inputs, 30)).toEqual(full);
   });
   it("입력 기록 검증: 순서·범위·값", () => {
     expect(validateSnakeInputs([{ tick: 1, dir: "U" }, { tick: 3, dir: "L" }], 10).ok).toBe(true);
