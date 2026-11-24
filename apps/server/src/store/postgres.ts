@@ -14,7 +14,15 @@ export class PostgresStore implements Store {
   }
 
   async init() {
-    await this.pool.query(SCHEMA);
+    // 여러 서버(또는 병렬 테스트)가 동시에 시작해도 스키마 생성이 충돌하지 않도록 잠금 후 적용
+    const c = await this.pool.connect();
+    try {
+      await c.query("select pg_advisory_lock(727001)");
+      await c.query(SCHEMA);
+    } finally {
+      await c.query("select pg_advisory_unlock(727001)").catch(() => {});
+      c.release();
+    }
   }
 
   async close() {
