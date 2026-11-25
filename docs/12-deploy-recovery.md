@@ -11,7 +11,10 @@ pnpm --filter @qp/web dev           # http://localhost:5173 (API 프록시)
 - Render Blueprint `quickplay` → 웹 서비스 `quickplay-staging`(Free), DB `quickplay-db`(Free PostgreSQL), 지역 singapore
 - main 에 병합되면 자동 배포(autoDeploy)
 - 비밀값: SESSION_SECRET 은 Render 가 생성, DATABASE_URL 은 DB 에서 자동 연결 — 사람이 입력한 비밀값 없음
-- GOOGLE_CLIENT_ID: Render 대시보드 > quickplay-staging > Environment 에서 설정(공개값)
+- GOOGLE_CLIENT_ID: render.yaml 에 공개값으로 기록(비밀 아님)
+- 구글 OAuth: Google Cloud 프로젝트 `quickplay-515800`(ClassBridge 프로젝트와 분리), 클라이언트 "QuickPlay Web"
+  - 허용 출처: https://quickplay-staging.onrender.com, http://localhost:5173, http://localhost
+  - 게시 상태 "테스트 중" — 테스트 사용자만 로그인 가능. 주소가 바뀌면(커스텀 도메인 등) 허용 출처에 추가해야 함
 
 ## 스테이징 배포 (사용자 승인 필요 단계 표시 ⚠️)
 1. ⚠️ Render 가입 → New > Blueprint → 이 저장소 선택 → `render.yaml` 적용(Free).
