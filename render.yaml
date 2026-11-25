@@ -30,7 +30,8 @@ services:
           name: quickplay-db
           property: connectionString
       - key: GOOGLE_CLIENT_ID
-        sync: false # 구글 OAuth 클라이언트 ID(공개값) — 비워 두면 로그인 버튼 대신 "준비 중" 표시
+        # 구글 OAuth 클라이언트 ID — 공개값(비밀 아님). Google Cloud 프로젝트 quickplay-515800 > 클라이언트 "QuickPlay Web"
+        value: 833779122071-irnrsbf4ve50i8u334lqdorfgvg27k6t.apps.googleusercontent.com
 
 databases:
   - name: quickplay-db
