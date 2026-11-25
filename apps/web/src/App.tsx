@@ -13,9 +13,10 @@ export default function App() {
 
   useEffect(() => connectLive(), []);
 
-  // 랜덤 매칭이 성사되면 어느 화면에 있든 대전 방으로 이동
+  // 랜덤 매칭이 성사되어 경기가 시작되면 어느 화면에 있든 대전 방으로 이동
+  // (끝난 랜덤 방으로 계속 끌려가지 않도록 "경기 중"일 때만)
   useEffect(() => {
-    if (live.room && live.room.mode === "random" && !loc.pathname.startsWith(`/r/${live.room.code}`)) {
+    if (live.room && live.room.mode === "random" && live.room.phase === "playing" && !loc.pathname.startsWith(`/r/${live.room.code}`)) {
       nav(`/r/${live.room.code}`);
     }
   }, [live.room, loc.pathname, nav]);

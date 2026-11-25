@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { GAMES, getGame, type RoomView } from "@qp/shared";
 import { gameUis } from "../games/registry";
@@ -75,6 +75,17 @@ function Room({ room, me, onLeft }: { room: RoomView; me: string | null; onLeft(
   const game = room.gameId ? getGame(room.gameId) : null;
   const ui = room.gameId ? gameUis[room.gameId] : null;
   const serverNow = useCallback(() => Date.now() + getLive().clockOffset, []);
+
+  // 끝난 랜덤 대전 방에서 다른 화면으로 나가면 자동으로 방을 떠난다(새 매칭이 막히지 않게)
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  useEffect(
+    () => () => {
+      const r = getLive().room;
+      if (r && r.code === roomRef.current.code && r.mode === "random" && r.phase !== "playing") void send("room:leave");
+    },
+    [],
+  );
 
   const leave = async () => {
     await send("room:leave");

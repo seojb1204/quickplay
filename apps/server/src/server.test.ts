@@ -462,7 +462,7 @@ describe("랭킹 집계 범위", () => {
 describe("요청 속도 제한", () => {
   it("X-Forwarded-For 를 바꿔도 HTTP 속도 제한을 우회할 수 없다", async () => {
     const codes: number[] = [];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 65; i++) {
       const r = await fetch(`${srv.base}/api/guest`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-forwarded-for": `10.0.0.${i}` },

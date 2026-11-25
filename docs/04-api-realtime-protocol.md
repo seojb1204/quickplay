@@ -15,7 +15,7 @@
 | POST | /api/solo/start | Bearer | `{gameId}` → `{sessionId, seed}` (현재 snake 만) |
 | POST | /api/solo/finish | Bearer | `{sessionId, inputs, endTick}` → `{score, best}` 서버 재생 점수 |
 
-제한: `/api` 경로만 IP당 분당 300회(정적 파일 제외), /api/guest 분당 20회. IP 는 `TRUST_PROXY_HOPS` 만큼의 프록시만 신뢰해 판별(X-Forwarded-For 위조 무력화).
+제한: `/api` 경로만 IP당 분당 300회(정적 파일 제외), /api/guest 분당 60회. IP 는 `TRUST_PROXY_HOPS` 만큼의 프록시만 신뢰해 판별(X-Forwarded-For 위조 무력화).
 
 ## Socket.IO (접속 시 `auth.token` 필수)
 클라이언트 → 서버 (모두 ack 콜백으로 `{ok:true,...}` 또는 `{ok:false,error}`)

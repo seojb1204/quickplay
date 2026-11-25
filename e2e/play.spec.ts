@@ -169,3 +169,26 @@ test("내 기록: 구글 클라이언트 ID 가 없으면 로그인 준비 중 �
   await page.goto("/me");
   await expect(page.getByTestId("login-disabled")).toBeVisible({ timeout: 10_000 });
 });
+
+test("끝난 랜덤 대전 방에서 다른 화면으로 가면 끌려오지 않고 새 랜덤 매칭이 가능", async ({ browser }) => {
+  const a = await newPlayer(browser);
+  const b = await newPlayer(browser);
+  for (const p of [a, b]) {
+    await p.goto("/g/gomoku");
+    await p.getByTestId("mode-random").click();
+  }
+  await a.getByTestId("random-join").click();
+  await b.getByTestId("random-join").click();
+  await expect(a.getByTestId("gomoku-turn")).toBeVisible({ timeout: 10_000 });
+  await b.getByTestId("forfeit").click();
+  await b.getByTestId("confirm-forfeit").click();
+  await expect(a.getByTestId("result")).toBeVisible();
+  // a 가 나가기 버튼 없이 다른 게임 화면으로 이동
+  await a.getByRole("link", { name: /QuickPlay/ }).click();
+  await a.getByTestId("game-snake").click();
+  await a.waitForTimeout(500);
+  await expect(a).toHaveURL(/\/g\/snake$/);
+  await a.getByTestId("mode-random").click();
+  await a.getByTestId("random-join").click();
+  await expect(a.getByTestId("queue-panel")).toBeVisible();
+});

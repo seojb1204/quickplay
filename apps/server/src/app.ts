@@ -106,7 +106,8 @@ export async function buildApp(config: ServerConfig, store: Store, deps: AppDeps
 
   // 세션 발급/갱신/닉네임 변경. 기존 토큰이 유효하면 같은 사용자(비회원·회원)를 유지한다.
   // 회원 토큰이 만료됐으면 새 비회원을 발급하고 expired=true 로 알린다.
-  app.post("/api/guest", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+  // 게스트 발급: PC방·학교처럼 IP 하나에서 여럿이 동시에 시작하는 경우를 고려해 분당 60회
+  app.post("/api/guest", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const body = (req.body ?? {}) as { token?: unknown; nickname?: unknown };
     const existing = verifySession(config.sessionSecret, body.token);
     let nickname = existing?.nickname ?? randomNickname();
